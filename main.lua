@@ -3,7 +3,7 @@
 
 return {
 	entry = function()
-		ya.manager_emit("shell", {
+		ya.emit("shell", {
 			[[
 				# Check if we're in a git repository
 				if ! git rev-parse --git-dir >/dev/null 2>&1; then
