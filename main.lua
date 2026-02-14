@@ -42,6 +42,10 @@ return {
                 remote_url=$(git remote get-url ]] .. selected_remote .. [[)
                 # Improved sed logic to handle common git URL formats
                 browser_url=$(echo "$remote_url" | sed -E \
+                    -e 's|^git@ssh\.dev\.azure\.com:v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\1/\2/_git/\3|' \
+                    -e 's|^ssh://git@ssh\.dev\.azure\.com(:[0-9]+)?/v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\2/\3/_git/\4|' \
+                    -e 's|^git@vs-ssh\.visualstudio\.com:v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\1/\2/_git/\3|' \
+                    -e 's|^ssh://git@vs-ssh\.visualstudio\.com(:[0-9]+)?/v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\2/\3/_git/\4|' \
                     -e 's|git@([^:]+):(.+)|https://\1/\2|' \
                     -e 's|ssh://git@([^/]+)/(.+)|https://\1/\2|' \
                     -e 's|\.git$||' \
