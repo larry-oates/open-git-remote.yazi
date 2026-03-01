@@ -1,10 +1,59 @@
 return {
 	entry = function()
+		local function safe_notify(title, content)
+			if (type(ya) == "table" or type(ya) == "userdata") and type(ya.notify) == "function" then
+				ya.notify {
+					title = title,
+					content = content,
+					timeout = 0,
+					urgency = 1,
+					progress = 0,
+					id = 0,
+				}
+			end
+			if package.config:sub(1, 1) == "\\" then
+				local esc_c = tostring(content):gsub('"', '\\"')
+				local esc_t = tostring(title):gsub('"', '\\"')
+				local cmd = 'powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\\"'
+					.. esc_c
+					.. '\\",\\"'
+					.. esc_t
+					.. '\\")"'
+				os.execute(cmd)
+			else
+				local function has_cmd(cmd)
+					local p = io.popen("command -v " .. cmd .. " 2>/dev/null")
+					local out = p and p:read("*a") or ""
+					if p then
+						p:close()
+					end
+					return out ~= nil and out ~= ""
+				end
+
+				local function shell_escape(s)
+					return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+				end
+
+				if has_cmd("notify-send") then
+					local cmd = "notify-send " .. shell_escape(title) .. " " .. shell_escape(content) .. " >/dev/null 2>&1 &"
+					os.execute(cmd)
+				elseif has_cmd("zenity") then
+					local cmd = "zenity --info --title " .. shell_escape(title) .. " --text " .. shell_escape(content) .. " >/dev/null 2>&1 &"
+					os.execute(cmd)
+				elseif has_cmd("kdialog") then
+					local cmd = "kdialog --title " .. shell_escape(title) .. " --msgbox " .. shell_escape(content) .. " >/dev/null 2>&1 &"
+					os.execute(cmd)
+				else
+					io.stderr:write(tostring(title) .. ": " .. tostring(content) .. "\n")
+				end
+			end
+		end
 		-- 1. Get remotes using Yazi's async Command API
 		local output, err = Command("git"):arg("remote"):output()
 
 		if not output then
-			return ya.notify({ title = "Git Open", content = "Failed to run git: " .. tostring(err), level = "error" })
+			safe_notify("Git Open", "Failed to run git: " .. tostring(err))
+			return
 		end
 
 		local remotes = {}
@@ -13,7 +62,8 @@ return {
 		end
 
 		if #remotes == 0 then
-			return ya.notify({ title = "Git Open", content = "No remotes found", level = "warn" })
+			safe_notify("Git Open", "No remotes found")
+			return
 		end
 
 		-- 2. Select remote
@@ -33,29 +83,106 @@ return {
 			selected_remote = remotes[idx]
 		end
 
-		-- 3. Execute the opener with a more robust shell string
-		-- We wrap the URL in quotes to prevent shell injection/parsing issues
-		ya.emit("shell", {
-			block = false,
-			confirm = false,
-			[[
-                remote_url=$(git remote get-url ]] .. selected_remote .. [[)
-                # Improved sed logic to handle common git URL formats
-                browser_url=$(echo "$remote_url" | sed -E \
-                    -e 's|^git@ssh\.dev\.azure\.com:v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\1/\2/_git/\3|' \
-                    -e 's|^ssh://git@ssh\.dev\.azure\.com(:[0-9]+)?/v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\2/\3/_git/\4|' \
-                    -e 's|^git@vs-ssh\.visualstudio\.com:v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\1/\2/_git/\3|' \
-                    -e 's|^ssh://git@vs-ssh\.visualstudio\.com(:[0-9]+)?/v3/([^/]+)/([^/]+)/([^/]+)$|https://dev.azure.com/\2/\3/_git/\4|' \
-                    -e 's|git@([^:]+):(.+)|https://\1/\2|' \
-                    -e 's|ssh://git@([^/]+)/(.+)|https://\1/\2|' \
-                    -e 's|\.git$||' \
-                    -e 's|https:///|https://|')
+		-- 3. Get remote URL
+		local output_url, err_url = Command("git"):arg("remote"):arg("get-url"):arg(selected_remote):output()
+		if not output_url then
+			safe_notify("Git Open", "Failed to get remote url: " .. tostring(err_url))
+			return
+		end
+		local url = output_url.stdout:gsub("[\r\n]+$", "")
 
-                if command -v open >/dev/null 2>&1; then open "$browser_url"
-                elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$browser_url"
-                elif command -v wslview >/dev/null 2>&1; then wslview "$browser_url"
-                fi
-            ]],
-		})
+		if not url or url == "" then
+			safe_notify("Git Open", "Empty remote URL")
+			return
+		end
+
+		-- 4. Transform URL (Lua implementation of the sed logic)
+		-- Azure DevOps
+		if url:match("^git@ssh%.dev%.azure%.com:v3/") then
+			url =
+				url:gsub("^git@ssh%.dev%.azure%.com:v3/([^/]+)/([^/]+)/([^/]+)$", "https://dev.azure.com/%1/%2/_git/%3")
+		elseif url:match("^ssh://git@ssh%.dev%.azure%.com.-/v3/") then
+			url = url:gsub(
+				"^ssh://git@ssh%.dev%.azure%.com.-/v3/([^/]+)/([^/]+)/([^/]+)$",
+				"https://dev.azure.com/%1/%2/_git/%3"
+			)
+		elseif url:match("^git@vs%-ssh%.visualstudio%.com:v3/") then
+			url = url:gsub(
+				"^git@vs%-ssh%.visualstudio%.com:v3/([^/]+)/([^/]+)/([^/]+)$",
+				"https://dev.azure.com/%1/%2/_git/%3"
+			)
+		elseif url:match("^ssh://git@vs%-ssh%.visualstudio%.com.-/v3/") then
+			url = url:gsub(
+				"^ssh://git@vs%-ssh%.visualstudio%.com.-/v3/([^/]+)/([^/]+)/([^/]+)$",
+				"https://dev.azure.com/%1/%2/_git/%3"
+			)
+		-- Standard Git
+		elseif url:match("^git@[^:]+:") then
+			url = url:gsub("^git@([^:]+):(.+)$", "https://%1/%2")
+		elseif url:match("^ssh://git@") then
+			url = url:gsub("^ssh://git@([^/]+)/(.+)$", "https://%1/%2")
+		end
+
+		-- Clean up
+		url = url:gsub("%.git$", "")
+		url = url:gsub("^https:///", "https://")
+
+		if not url or url == "" then
+			safe_notify("Git Open", "Failed to transform URL")
+			return
+		end
+
+		-- 5. Open URL
+		if package.config:sub(1, 1) == "\\" then
+			-- Windows
+			os.execute("start " .. url)
+		else
+			-- Unix (macOS, Linux, WSL)
+			local function has_cmd(cmd)
+				local p = io.popen("command -v " .. cmd .. " 2>/dev/null")
+				local out = p and p:read("*a") or ""
+				if p then
+					p:close()
+				end
+				return out ~= nil and out ~= ""
+			end
+
+			local opener
+			if has_cmd("open") then
+				opener = "open"
+			elseif has_cmd("xdg-open") then
+				opener = "xdg-open"
+			elseif has_cmd("wslview") then
+				opener = "wslview"
+			end
+
+			-- Additional browser fallbacks
+			local fallbacks = { "gio", "sensible-browser", "x-www-browser", "firefox", "google-chrome", "chromium", "brave-browser" }
+
+			local function shell_escape(s)
+				return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+			end
+
+			local cmd
+			if opener then
+				cmd = opener .. " " .. shell_escape(url) .. " >/dev/null 2>&1 &"
+			else
+				for _, b in ipairs(fallbacks) do
+					if has_cmd(b) then
+						cmd = b .. " " .. shell_escape(url) .. " >/dev/null 2>&1 &"
+						break
+					end
+				end
+			end
+
+			if cmd then
+				local ok = os.execute(cmd)
+				if not ok then
+					pcall(safe_notify, "Git Open", "Failed to open URL with command: " .. cmd)
+				end
+			else
+				safe_notify("Git Open", "No browser opener found (install xdg-utils or a browser)")
+			end
+		end
 	end,
 }
