@@ -1,6 +1,6 @@
 # open-git-remote.yazi
 Plugin for [Yazi](https://github.com/sxyazi/yazi) to open git repos's remote url quickly with a shortcut.  
-Jump to the github page from yazi!
+Jump to the code host page from yazi!
 
 Inspired by [Sylvan Franklin](https://www.youtube.com/watch?v=YDd0MYtfIp8&t=153s)
 ## Dependencies
@@ -11,7 +11,6 @@ Inspired by [Sylvan Franklin](https://www.youtube.com/watch?v=YDd0MYtfIp8&t=153s
   - `xdg-open` (Linux)
   - `start` (Windows/Git Bash)
   - `wslview` (WSL)
-  - [GitHub CLI (`gh`)](https://cli.github.com/) - (**and/or** - just opens github links)
 
 
 
@@ -40,4 +39,6 @@ run  = "plugin open-git-remote"
 desc = "open git remote url"
 ```
 I use g then l for "Git Link" but you can customize the keybinding however you like. Please refer to the [keymap.toml](https://yazi-rs.github.io/docs/configuration/keymap) documentation
+
+
 
