@@ -222,15 +222,10 @@ return {
 
         url = transform_url(url, is_bitbucket_server)
 
-        if not url or url == "" then
-            notify("Git Open", "Failed to transform URL", "error")
-            return
-        end
-
         -- 5. Open URL
         if package.config:sub(1, 1) == "\\" then
-            -- Windows
-            os.execute("start " .. url)
+            -- Windows: use cmd /c start to safely handle URLs with special characters
+            Command("cmd"):arg("/c"):arg("start"):arg(""):arg(url):output()
         else
             -- Unix (macOS, Linux, WSL)
             local function has_cmd(cmd)
@@ -274,7 +269,7 @@ return {
             if cmd then
                 local ok = os.execute(cmd)
                 if not ok then
-                    pcall(safe_notify, "Git Open", "Failed to open URL with command: " .. cmd)
+                    pcall(notify, "Git Open", "Failed to open URL with command: " .. cmd, "error")
                 end
             else
                 notify("Git Open", "No browser opener found (install xdg-utils or a browser)", "error")
