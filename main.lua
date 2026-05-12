@@ -1,6 +1,18 @@
 local bitbucket_host_cache = {}
 local bb_cache_loaded = false
 
+-- Well-known public forges that are never Bitbucket Server — skip the REST API probe for these
+local known_non_bitbucket = {
+    ["github.com"]         = true,
+    ["gitlab.com"]         = true,
+    ["bitbucket.org"]      = true,
+    ["dev.azure.com"]      = true,
+    ["ssh.dev.azure.com"]  = true,
+    ["vs-ssh.visualstudio.com"] = true,
+    ["codeberg.org"]       = true,
+    ["sourcehut.org"]      = true,
+}
+
 local function bb_cache_path()
     if package.config:sub(1, 1) == "\\" then
         local base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or ""
@@ -231,6 +243,7 @@ return {
 
         -- 4. Transform URL
         local function is_bitbucket_server(host)
+            if known_non_bitbucket[host] then return false end
             load_bb_cache()
             if bitbucket_host_cache[host] ~= nil then
                 return bitbucket_host_cache[host]

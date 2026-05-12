@@ -5,7 +5,8 @@
 local plugin = dofile(debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])") .. "main.lua")
 local transform_url = plugin.transform_url
 
--- Mock host checker: avoids real network calls during tests
+-- Mock host checker: returns true for known Bitbucket test hosts.
+-- Known public forges are skipped before this is ever called (via known_non_bitbucket table).
 local bitbucket_hosts = { ["bitbucket.example.com"] = true }
 local function mock_is_bitbucket(host) return bitbucket_hosts[host] == true end
 
@@ -133,6 +134,12 @@ test("SSH ssh:// with non-standard port – port stripped from HTTPS URL",
 test("SSH ssh:// with port 22 – port stripped from HTTPS URL",
     "ssh://git@github.com:22/user/repo.git",
     "https://github.com/user/repo")
+test("SSH ssh:// github.com – known forge, no Bitbucket probe",
+    "ssh://git@github.com/user/repo.git",
+    "https://github.com/user/repo")
+test("SSH ssh:// gitlab.com – known forge, no Bitbucket probe",
+    "ssh://git@gitlab.com/group/repo.git",
+    "https://gitlab.com/group/repo")
 
 -- ── Summary ───────────────────────────────────────────────────────────────────
 print(string.format("\n%d passed, %d failed\n", pass, fail))
