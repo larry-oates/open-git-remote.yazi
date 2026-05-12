@@ -136,62 +136,20 @@ end
 return {
     transform_url = transform_url,
     entry = function()
-        local function safe_notify(title, content)
-            if (type(ya) == "table" or type(ya) == "userdata") and type(ya.notify) == "function" then
-                ya.notify {
-                    title = title,
-                    content = content,
-                    timeout = 0,
-                    urgency = 1,
-                    progress = 0,
-                    id = 0
-                }
-            end
-            if package.config:sub(1, 1) == "\\" then
-                local esc_c = tostring(content):gsub('"', '\\"')
-                local esc_t = tostring(title):gsub('"', '\\"')
-                local cmd =
-                    'powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\\"' ..
-                        esc_c .. '\\",\\"' .. esc_t .. '\\")"'
-                os.execute(cmd)
-            else
-                local function has_cmd(cmd)
-                    local p = io.popen("command -v " .. cmd .. " 2>/dev/null")
-                    local out = p and p:read("*a") or ""
-                    if p then
-                        p:close()
-                    end
-                    return out ~= nil and out ~= ""
-                end
-
-                local function shell_escape(s)
-                    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
-                end
-
-                if has_cmd("notify-send") then
-                    local cmd = "notify-send " .. shell_escape(title) .. " " .. shell_escape(content) ..
-                                    " >/dev/null 2>&1 &"
-                    os.execute(cmd)
-                elseif has_cmd("zenity") then
-                    local cmd =
-                        "zenity --info --title " .. shell_escape(title) .. " --text " .. shell_escape(content) ..
-                            " >/dev/null 2>&1 &"
-                    os.execute(cmd)
-                elseif has_cmd("kdialog") then
-                    local cmd = "kdialog --title " .. shell_escape(title) .. " --msgbox " .. shell_escape(content) ..
-                                    " >/dev/null 2>&1 &"
-                    os.execute(cmd)
-                else
-                    io.stderr:write(tostring(title) .. ": " .. tostring(content) .. "\n")
-                end
-            end
+        local function notify(title, content, level)
+            ya.notify {
+                title = title,
+                content = content,
+                timeout = 5,
+                level = level or "info",
+            }
         end
 
         -- 1. Get remotes using Yazi's async Command API
         local output, err = Command("git"):arg("remote"):output()
 
         if not output then
-            safe_notify("Git Open", "Failed to run git: " .. tostring(err))
+            notify("Git Open", "Failed to run git: " .. tostring(err), "error")
             return
         end
 
@@ -201,7 +159,7 @@ return {
         end
 
         if #remotes == 0 then
-            safe_notify("Git Open", "No remotes found")
+            notify("Git Open", "No remotes found", "error")
             return
         end
 
@@ -231,13 +189,13 @@ return {
         -- 3. Get remote URL
         local output_url, err_url = Command("git"):arg("remote"):arg("get-url"):arg(selected_remote):output()
         if not output_url then
-            safe_notify("Git Open", "Failed to get remote url: " .. tostring(err_url))
+            notify("Git Open", "Failed to get remote url: " .. tostring(err_url), "error")
             return
         end
         local url = output_url.stdout:gsub("[\r\n]+$", "")
 
         if not url or url == "" then
-            safe_notify("Git Open", "Empty remote URL")
+            notify("Git Open", "Empty remote URL", "error")
             return
         end
 
@@ -265,7 +223,7 @@ return {
         url = transform_url(url, is_bitbucket_server)
 
         if not url or url == "" then
-            safe_notify("Git Open", "Failed to transform URL")
+            notify("Git Open", "Failed to transform URL", "error")
             return
         end
 
@@ -319,7 +277,7 @@ return {
                     pcall(safe_notify, "Git Open", "Failed to open URL with command: " .. cmd)
                 end
             else
-                safe_notify("Git Open", "No browser opener found (install xdg-utils or a browser)")
+                notify("Git Open", "No browser opener found (install xdg-utils or a browser)", "error")
             end
         end
     end
